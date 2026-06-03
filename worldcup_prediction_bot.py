@@ -8,8 +8,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import (
     ReplyKeyboardMarkup,
     KeyboardButton,
-    ReplyKeyboardRemove
-)TOKEN = "YOUR_BOT_TOKEN"
+    ReplyKeyboardRemove)TOKEN = "YOUR_BOT_TOKEN"
 ADMIN_ID = 1562540
 
 bot = Bot(token=TOKEN)
