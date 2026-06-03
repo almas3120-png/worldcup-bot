@@ -863,7 +863,6 @@ async def send_broadcast(
 🏅 نفرات چهارم تا دهم
 هر نفر 10 میلیون ریال
 """from datetime import datetime
-/addmatch ایران|برزیل|2026-06-15 18:00
 match = cur.execute("""
 SELECT match_date
 FROM matches
