@@ -576,11 +576,6 @@ async def add_match(
     await message.answer(
         "✅ مسابقه ثبت شد."
     )
-    /addmatch ایران|برزیل|2026-06-15
-
-/addmatch آلمان|فرانسه|2026-06-16
-
-/addmatch آرژانتین|اسپانیا|2026-06-17
 @dp.message(Command("result"))
 async def set_result(message: types.Message):
 
