@@ -937,7 +937,7 @@ async def admin_panel(
     message: types.Message
 ):
 
-    if message.from_user.id != ADMIN_ID:
+    if message.from_user.id != ADMIN_ID:1562540
         return
 
     text = """
