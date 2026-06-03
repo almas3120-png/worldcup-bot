@@ -15,7 +15,7 @@ from aiogram.types import (
 # SETTINGS
 # =====================================
 
-TOKEN = "YOUR_BOT_TOKEN"
+TOKEN = "8611001244:AAHSlm857J7_eThnFHwO_bVMutU2dj3rMrw"
 ADMIN_ID = 1562540
 
 bot = Bot(token=TOKEN)
