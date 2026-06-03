@@ -750,4 +750,279 @@ async def admin_top(message: types.Message):
         )
 
     await message.answer(text)
+    admin_menu = ReplyKeyboardMarkup(
+    keyboard=[
+        [
+            KeyboardButton(text="➕ افزودن مسابقه"),
+            KeyboardButton(text="🏁 ثبت نتیجه")
+        ],
+        [
+            KeyboardButton(text="📢 پیام همگانی"),
+            KeyboardButton(text="👥 آمار کاربران")
+        ],
+        [
+            KeyboardButton(text="🏆 رتبه بندی")
+        ]
+    ],
+    resize_keyboard=True
+)@dp.message(Command("admin"))
+async def admin_panel(message: types.Message):
+
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    await message.answer(
+        "🔐 پنل مدیریت",
+        reply_markup=admin_menu
+    )@dp.message(F.text == "👥 آمار کاربران")
+async def users_stats(message: types.Message):
+
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    users = cur.execute("""
+    SELECT COUNT(*)
+    FROM users
+    WHERE registered=1
+    """).fetchone()[0]
+
+    predictions = cur.execute("""
+    SELECT COUNT(*)
+    FROM predictions
+    """).fetchone()[0]
+
+    await message.answer(
+        f"👥 کاربران: {users}\n"
+        f"⚽ تعداد پیش‌بینی‌ها: {predictions}"
+    )broadcast = State()broadcast = State()@dp.message(F.text == "📢 پیام همگانی")
+async def start_broadcast(
+        message: types.Message,
+        state: FSMContext
+):
+
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    await message.answer(
+        "متن پیام را ارسال کنید:"
+    )
+
+    await state.set_state(
+        Registration.broadcast
+    )@dp.message(Registration.broadcast)
+async def send_broadcast(
+        message: types.Message,
+        state: FSMContext
+):
+
+    users = cur.execute("""
+    SELECT user_id
+    FROM users
+    WHERE registered=1
+    """).fetchall()
+
+    sent = 0
+
+    for user in users:
+
+        try:
+
+            await bot.send_message(
+                user[0],
+                message.text
+            )
+
+            sent += 1
+
+        except:
+            pass
+
+    await state.clear()
+
+    await message.answer(
+        f"✅ پیام برای {sent} نفر ارسال شد."
+    )welcome_text = """
+🏆 پیش‌بینی جام جهانی 2026
+با هنگویه اسپورت
+
+به بزرگ‌ترین مسابقه پیش‌بینی فوتبال خوش آمدید.
+
+🎯 پیش‌بینی نتایج
+🏅 کسب امتیاز
+🏆 رقابت با سایر شرکت‌کنندگان
+🎁 دریافت جوایز نقدی
+
+برای ادامه ابتدا ثبت نام خود را تکمیل نمایید.
+"""prize_text = """
+🎁 جوایز مسابقه
+
+🥇 نفر اول
+100 میلیون ریال
+
+🥈 نفر دوم
+50 میلیون ریال
+
+🥉 نفر سوم
+25 میلیون ریال
+
+🏅 نفرات چهارم تا دهم
+هر نفر 10 میلیون ریال
+"""from datetime import datetime
+/addmatch ایران|برزیل|2026-06-15 18:00
+match = cur.execute("""
+SELECT match_date
+FROM matches
+WHERE id=?
+""",(match_id,)).fetchone()
+
+match_time = datetime.strptime(
+    match[0],
+    "%Y-%m-%d %H:%M"
+)
+
+if datetime.now() >= match_time:
+    await message.answer(
+        "⛔ زمان ثبت پیش‌بینی این مسابقه به پایان رسیده است."
+    )
+    return
+    @dp.message(F.text == "👤 رتبه من")
+async def my_rank(message: types.Message):
+
+    users = cur.execute("""
+    SELECT user_id, points
+    FROM users
+    ORDER BY points DESC
+    """).fetchall()
+
+    rank = 0
+
+    for i, user in enumerate(users, start=1):
+
+        if user[0] == message.from_user.id:
+            rank = i
+            points = user[1]
+            break
+
+    await message.answer(
+        f"🏅 رتبه شما: {rank}\n"
+        f"⭐ امتیاز شما: {points}"
+    )
+    KeyboardButton(text="👥 شرکت‌کنندگان")
+    @dp.message(F.text == "👥 شرکت‌کنندگان")
+async def participants(message: types.Message):
+
+    count = cur.execute("""
+    SELECT COUNT(*)
+    FROM users
+    WHERE registered=1
+    """).fetchone()[0]
+
+    await message.answer(
+        f"👥 تعداد شرکت‌کنندگان: {count}"
+    )
+    @dp.message(F.text == "🥇 نفرات برتر")
+async def top_users(message: types.Message):
+
+    rows = cur.execute("""
+    SELECT first_name,
+           last_name,
+           points
+    FROM users
+    ORDER BY points DESC
+    LIMIT 10
+    """).fetchall()
+
+    text = "🏆 ده نفر برتر مسابقات\n\n"
+
+    medals = [
+        "🥇","🥈","🥉",
+        "4️⃣","5️⃣","6️⃣",
+        "7️⃣","8️⃣","9️⃣","🔟"
+    ]
+
+    for i,row in enumerate(rows):
+
+        text += (
+            f"{medals[i]} "
+            f"{row[0]} {row[1]}\n"
+            f"⭐ {row[2]} امتیاز\n\n"
+        )
+
+    await message.answer(text)
+    @dp.message(Command("deletematch"))
+async def delete_match(message: types.Message):
+
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    try:
+        _, match_id = message.text.split()
+        match_id = int(match_id)
+    except:
+        await message.answer(
+            "/deletematch 1"
+        )
+        return
+
+    cur.execute(
+        "DELETE FROM matches WHERE id=?",
+        (match_id,)
+    )
+
+    db.commit()
+
+    await message.answer(
+        "✅ مسابقه حذف شد."
+    )
+    @dp.message(Command("editresult"))
+async def edit_result(message: types.Message):
+
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    try:
+
+        _, match_id, score = message.text.split()
+
+        s1, s2 = map(
+            int,
+            score.split("-")
+        )
+
+    except:
+
+        await message.answer(
+            "/editresult 1 2-1"
+        )
+        return
+
+    cur.execute("""
+    UPDATE matches
+    SET score1=?,
+        score2=?
+    WHERE id=?
+    """,(s1,s2,match_id))
+
+    db.commit()
+
+    await message.answer(
+        "✅ نتیجه ویرایش شد."
+    )
+    await message.answer(
+"""
+✅ ثبت نام شما تکمیل شد.
+
+🏆 پیش‌بینی جام جهانی 2026
+با هنگویه اسپورت
+
+اکنون می‌توانید از منوی اصلی
+در مسابقات شرکت کنید.
+
+🎁 جوایز نقدی برای 10 نفر برتر
+در نظر گرفته شده است.
+
+موفق باشید.
+""",
+reply_markup=main_menu
+)
     
