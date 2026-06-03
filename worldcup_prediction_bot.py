@@ -1,43 +1,46 @@
-import os
 import asyncio
 import sqlite3
 
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
-
-# Railway Variables
-TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
-
-if not TOKEN:
-    raise ValueError("BOT_TOKEN not found!")
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.context import FSMContext
+from aiogram.types import (
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardRemove
+)TOKEN = "YOUR_BOT_TOKEN"
+ADMIN_ID = 1562540
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
-
-# Database
 db = sqlite3.connect("worldcup.db")
 cur = db.cursor()
-
 cur.execute("""
 CREATE TABLE IF NOT EXISTS users(
     user_id INTEGER PRIMARY KEY,
     username TEXT,
-    points INTEGER DEFAULT 0
+    first_name TEXT,
+    last_name TEXT,
+    national_code TEXT,
+    mobile TEXT,
+    province TEXT,
+    city TEXT,
+    points INTEGER DEFAULT 0,
+    registered INTEGER DEFAULT 0
 )
 """)
-
 cur.execute("""
 CREATE TABLE IF NOT EXISTS matches(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     team1 TEXT,
     team2 TEXT,
+    match_date TEXT,
     score1 INTEGER,
     score2 INTEGER,
     finished INTEGER DEFAULT 0
 )
 """)
-
 cur.execute("""
 CREATE TABLE IF NOT EXISTS predictions(
     user_id INTEGER,
@@ -49,210 +52,166 @@ CREATE TABLE IF NOT EXISTS predictions(
 """)
 
 db.commit()
+class Registration(StatesGroup):
+    first_name = State()
+    last_name = State()
+    national_code = State()
+    mobile = State()
+    province = State()
+    city = State()
+    rules = State()
+    main_menu = ReplyKeyboardMarkup(
+    keyboard=[
+        [
+            KeyboardButton(text="🏆 شرکت در مسابقه"),
+            KeyboardButton(text="📋 مسابقات")
+        ],
+        [
+            KeyboardButton(text="🥇 نفرات برتر"),
+            KeyboardButton(text="👤 رتبه من")
+        ],
+        [
+            KeyboardButton(text="🎁 جوایز")
+        ]
+    ],
+    resize_keyboard=True
+)
+    contact_keyboard = ReplyKeyboardMarkup(
+    keyboard=[
+        [
+            KeyboardButton(
+                text="📱 ارسال شماره موبایل",
+                request_contact=True
+            )
+        ]
+    ],
+    resize_keyboard=True
+)
+    rules_keyboard = ReplyKeyboardMarkup(
+    keyboard=[
+        [
+            KeyboardButton(
+                text="✅ قوانین را می‌پذیرم"
+            )
+        ]
+    ],
+    resize_keyboard=True
+)
+    def is_registered(user_id):
 
-
-def register_user(user):
-    cur.execute(
-        "INSERT OR IGNORE INTO users(user_id, username) VALUES (?, ?)",
-        (user.id, user.username or "")
-    )
-    db.commit()
-
-
-@dp.message(Command("start"))
-async def start(message: types.Message):
-    register_user(message.from_user)
-
-    await message.answer(
-        "🏆 ربات پیش‌بینی جام جهانی\n\n"
-        "/matches - لیست مسابقات\n"
-        "/predict 1 2-1 - ثبت پیش‌بینی\n"
-        "/ranking - جدول رتبه‌بندی"
-    )
-
-
-@dp.message(Command("matches"))
-async def matches(message: types.Message):
-
-    rows = cur.execute(
-        "SELECT id, team1, team2, finished FROM matches"
-    ).fetchall()
-
-    if not rows:
-        await message.answer("هیچ مسابقه‌ای ثبت نشده است.")
-        return
-
-    text = "📋 مسابقات:\n\n"
-
-    for row in rows:
-        status = "✅ تمام شده" if row[3] else "⏳ باز"
-
-        text += (
-            f"ID:{row[0]}\n"
-            f"{row[1]} vs {row[2]}\n"
-            f"{status}\n\n"
-        )
-
-    await message.answer(text)
-
-
-@dp.message(Command("predict"))
-async def predict(message: types.Message):
-
-    register_user(message.from_user)
-
-    try:
-        _, match_id, score = message.text.split()
-
-        p1, p2 = map(int, score.split("-"))
-        match_id = int(match_id)
-
-    except:
-        await message.answer(
-            "نمونه:\n/predict 1 2-1"
-        )
-        return
-
-    match = cur.execute(
-        "SELECT finished FROM matches WHERE id=?",
-        (match_id,)
+    row = cur.execute(
+        """
+        SELECT registered
+        FROM users
+        WHERE user_id=?
+        """,
+        (user_id,)
     ).fetchone()
 
-    if not match:
-        await message.answer("شناسه مسابقه معتبر نیست.")
-        return
+    return row and row[0] == 1
+    @dp.message(Command("start"))
+async def start(
+        message: types.Message,
+        state: FSMContext
+):
 
-    if match[0] == 1:
-        await message.answer("مسابقه تمام شده است.")
-        return
+    if is_registered(message.from_user.id):
 
-    cur.execute("""
-    INSERT OR REPLACE INTO predictions
-    (user_id, match_id, pred1, pred2)
-    VALUES (?, ?, ?, ?)
-    """,
-    (message.from_user.id, match_id, p1, p2))
-
-    db.commit()
-
-    await message.answer("✅ پیش‌بینی ثبت شد.")
-
-
-@dp.message(Command("ranking"))
-async def ranking(message: types.Message):
-
-    rows = cur.execute("""
-    SELECT username, points
-    FROM users
-    ORDER BY points DESC
-    LIMIT 20
-    """).fetchall()
-
-    if not rows:
-        await message.answer("جدول خالی است.")
-        return
-
-    text = "🏅 رتبه‌بندی:\n\n"
-
-    for i, row in enumerate(rows, start=1):
-        username = row[0] if row[0] else "بدون نام"
-
-        text += (
-            f"{i}. {username} - {row[1]} امتیاز\n"
-        )
-
-    await message.answer(text)
-
-
-@dp.message(Command("addmatch"))
-async def addmatch(message: types.Message):
-
-    if message.from_user.id != ADMIN_ID:
-        return
-
-    try:
-        _, team1, team2 = message.text.split()
-
-    except:
         await message.answer(
-            "/addmatch Iran Japan"
-        )
-        return
-
-    cur.execute(
-        "INSERT INTO matches(team1, team2) VALUES (?, ?)",
-        (team1, team2)
-    )
-
-    db.commit()
-
-    await message.answer("✅ مسابقه اضافه شد.")
-
-
-@dp.message(Command("result"))
-async def result(message: types.Message):
-
-    if message.from_user.id != ADMIN_ID:
-        return
-
-    try:
-        _, match_id, score = message.text.split()
-
-        s1, s2 = map(int, score.split("-"))
-        match_id = int(match_id)
-
-    except:
-        await message.answer(
-            "/result 1 2-1"
-        )
-        return
-
-    cur.execute("""
-    UPDATE matches
-    SET score1=?, score2=?, finished=1
-    WHERE id=?
-    """,
-    (s1, s2, match_id))
-
-    predictions = cur.execute("""
-    SELECT user_id, pred1, pred2
-    FROM predictions
-    WHERE match_id=?
-    """,
-    (match_id,)).fetchall()
-
-    for user_id, p1, p2 in predictions:
-
-        points = 0
-
-        if p1 == s1 and p2 == s2:
-            points = 3
-
-        elif (
-            (p1 > p2 and s1 > s2)
-            or
-            (p1 < p2 and s1 < s2)
-            or
-            (p1 == p2 and s1 == s2)
-        ):
-            points = 1
-
-        cur.execute(
-            "UPDATE users SET points = points + ? WHERE user_id=?",
-            (points, user_id)
+            "🏆 به سامانه پیش‌بینی جام جهانی 2026 با هنگویه اسپورت خوش آمدید.",
+            reply_markup=main_menu
         )
 
-    db.commit()
+        return
 
     await message.answer(
-        "✅ نتیجه ثبت شد و امتیازات محاسبه شد."
+        "نام خود را وارد کنید:"
     )
 
+    await state.set_state(
+        Registration.first_name
+    )
+    @dp.message(Command("start"))
+async def start(
+        message: types.Message,
+        state: FSMContext
+):
 
-async def main():
-    print("Bot started...")
-    await dp.start_polling(bot)
+    if is_registered(message.from_user.id):
 
+        await message.answer(
+            "🏆 به سامانه پیش‌بینی جام جهانی 2026 با هنگویه اسپورت خوش آمدید.",
+            reply_markup=main_menu
+        )
 
-if __name__ == "__main__":
-    asyncio.run(main())
+        return
+
+    await message.answer(
+        "نام خود را وارد کنید:"
+    )
+
+    await state.set_state(
+        Registration.first_name
+    )
+    @dp.message(Registration.first_name)
+async def get_first_name(
+        message: types.Message,
+        state: FSMContext
+):
+
+    await state.update_data(
+        first_name=message.text
+    )
+
+    await message.answer(
+        "نام خانوادگی را وارد کنید:"
+    )
+
+    await state.set_state(
+        Registration.last_name
+    )
+    @dp.message(Registration.last_name)
+async def get_last_name(
+        message: types.Message,
+        state: FSMContext
+):
+
+    await state.update_data(
+        last_name=message.text
+    )
+
+    await message.answer(
+        "کد ملی 10 رقمی را وارد کنید:"
+    )
+
+    await state.set_state(
+        Registration.national_code
+    )
+    @dp.message(Registration.national_code)
+async def get_national_code(
+        message: types.Message,
+        state: FSMContext
+):
+
+    code = message.text.strip()
+
+    if not code.isdigit() or len(code) != 10:
+
+        await message.answer(
+            "کد ملی نامعتبر است."
+        )
+        return
+
+    await state.update_data(
+        national_code=code
+    )
+
+    await message.answer(
+        "شماره موبایل را ارسال کنید:",
+        reply_markup=contact_keyboard
+    )
+
+    await state.set_state(
+        Registration.mobile
+    )
+    
